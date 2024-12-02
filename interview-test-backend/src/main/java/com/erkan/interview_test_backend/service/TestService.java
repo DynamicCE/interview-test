@@ -40,13 +40,11 @@ public class TestService {
             throw new IllegalStateException("Test bulunamadı veya süresi dolmuş");
         }
 
-        TestResult result = new TestResult();
-        result.setCategory(category);
-        result.setScore(calculateScore(questions, answers));
-        result.setWeakTopics(weakTopics);
-        result.setTestDate(LocalDateTime.now());
+        TestResult result =
+                TestResult.builder().category(category).score(calculateScore(questions, answers))
+                        .weakTopics(weakTopics).testDate(LocalDateTime.now()).build();
 
-        activeTests.remove(testId); // Testi temizle
+        activeTests.remove(testId);
         return testResultRepository.save(result);
     }
 
@@ -67,5 +65,10 @@ public class TestService {
 
     private String generateTestId() {
         return System.currentTimeMillis() + "-" + Math.random();
+    }
+
+    // Sadece test için
+    Map<String, List<QuestionDTO>> getActiveTests() {
+        return activeTests;
     }
 }
