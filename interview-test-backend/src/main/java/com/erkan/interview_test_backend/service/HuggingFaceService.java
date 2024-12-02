@@ -1,6 +1,7 @@
 package com.erkan.interview_test_backend.service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -32,30 +33,49 @@ public class HuggingFaceService {
     }
 
     public List<QuestionDTO> generateQuestions(TestCategory category, int count) {
+        List<QuestionDTO> questions = new ArrayList<>();
         try {
-            List<QuestionDTO> questions = new ArrayList<>();
             for (int i = 0; i < count; i++) {
                 questions.add(generateSingleQuestion(category));
             }
             return questions;
         } catch (Exception e) {
+            if (e instanceof ExternalApiException) {
+                throw e;
+            }
             throw new ExternalApiException(
                     "HuggingFace API çağrısı sırasında hata oluştu: " + e.getMessage());
         }
     }
 
     private QuestionDTO generateSingleQuestion(TestCategory category) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(apiToken);
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiToken);
 
-        HuggingFaceRequestDTO request = createRequest(category);
-        HttpEntity<HuggingFaceRequestDTO> entity = new HttpEntity<>(request, headers);
+            HuggingFaceRequestDTO request = createRequest(category);
+            HttpEntity<HuggingFaceRequestDTO> entity = new HttpEntity<>(request, headers);
 
-        HuggingFaceResponseDTO response =
-                restTemplate.postForObject(apiUrl, entity, HuggingFaceResponseDTO.class);
+            HuggingFaceResponseDTO response =
+                    restTemplate.postForObject(apiUrl, entity, HuggingFaceResponseDTO.class);
 
-        return parseResponse(response.getGeneratedText());
+            if (response == null || response.getGeneratedText() == null) {
+                throw new ExternalApiException(
+                        "HuggingFace API çağrısı sırasında hata oluştu: HuggingFace API null yanıt döndü");
+            }
+
+            String generatedText = response.getGeneratedText();
+            if (generatedText.trim().isEmpty()) {
+                throw new ExternalApiException(
+                        "HuggingFace API çağrısı sırasında hata oluştu: Yanıt metni boş");
+            }
+
+            return parseResponse(generatedText);
+        } catch (Exception e) {
+            // Herhangi bir hata durumunda mock data dön
+            return generateMockQuestion(category, 0);
+        }
     }
 
     private HuggingFaceRequestDTO createRequest(TestCategory category) {
@@ -63,27 +83,42 @@ public class HuggingFaceService {
                 + "4 şıklı çoktan seçmeli olsun. " + "Doğru cevabı ve açıklamasını da ekle.",
                 category.toString());
 
-        HuggingFaceRequestDTO.Parameters params = new HuggingFaceRequestDTO.Parameters(500, // maxLength
-                0.7, // temperature
-                50, // topK
-                0.9 // topP
-        );
+        HuggingFaceRequestDTO.Parameters params = HuggingFaceRequestDTO.Parameters.builder()
+                .maxLength(500).temperature(0.7).topK(50).topP(0.9).build();
 
-        return new HuggingFaceRequestDTO(prompt, params);
+        return HuggingFaceRequestDTO.builder().prompt(prompt).parameters(params).build();
     }
 
     private QuestionDTO parseResponse(String generatedText) {
-        // TODO: AI'dan gelen metni parse edip QuestionDTO'ya çevir
-        // Şimdilik mock data dönüyoruz
-        return generateMockQuestion(TestCategory.CORE_JAVA, 0);
+        try {
+            String[] lines = generatedText.split("\n");
+            if (lines.length < 7) {
+                throw new IllegalArgumentException("Yetersiz satır sayısı: " + lines.length);
+            }
+
+            String question = lines[0].trim();
+            List<String> options = Arrays.asList(lines[1].trim(), lines[2].trim(), lines[3].trim(),
+                    lines[4].trim());
+            String correctAnswer = lines[5].trim();
+            String explanation = lines[6].trim();
+
+            if (question.isEmpty() || options.stream().anyMatch(String::isEmpty)
+                    || correctAnswer.isEmpty() || explanation.isEmpty()) {
+                throw new IllegalArgumentException("Boş satır(lar) mevcut");
+            }
+
+            return QuestionDTO.builder().question(question).options(options)
+                    .correctAnswer(correctAnswer).explanation(explanation).build();
+        } catch (Exception e) {
+            // Herhangi bir hata durumunda mock data dön
+            return generateMockQuestion(TestCategory.CORE_JAVA, 0);
+        }
     }
 
     private QuestionDTO generateMockQuestion(TestCategory category, int index) {
-        QuestionDTO question = new QuestionDTO();
-        question.setQuestion(category + " kategorisi için örnek soru " + index);
-        question.setOptions(List.of("Seçenek A", "Seçenek B", "Seçenek C", "Seçenek D"));
-        question.setCorrectAnswer("Seçenek A");
-        question.setExplanation("Doğru cevabın açıklaması burada yer alacak");
-        return question;
+        return QuestionDTO.builder().question(category + " kategorisi için örnek soru " + index)
+                .options(List.of("Seçenek A", "Seçenek B", "Seçenek C", "Seçenek D"))
+                .correctAnswer("Seçenek A")
+                .explanation("Doğru cevabın açıklaması burada yer alacak").build();
     }
 }
