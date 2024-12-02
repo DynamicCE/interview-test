@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TestSubmissionDTO {
+    private String testId;
     private TestCategory category;
     private List<String> answers;
     private List<String> weakTopics;
