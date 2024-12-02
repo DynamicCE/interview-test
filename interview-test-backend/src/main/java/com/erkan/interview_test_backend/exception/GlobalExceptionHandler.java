@@ -12,15 +12,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ExternalApiException.class)
     public ResponseEntity<ErrorResponse> handleExternalApiException(ExternalApiException ex) {
-        ErrorResponse error = new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE.value(),
-                "Dış API Hatası", ex.getMessage());
+        ErrorResponse error = ErrorResponse.builder().status(HttpStatus.SERVICE_UNAVAILABLE.value())
+                .error("Dış API Hatası").message(ex.getMessage()).build();
         return new ResponseEntity<>(error, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
-        ErrorResponse error = new ErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "Sunucu Hatası", "Beklenmeyen bir hata oluştu");
+        ErrorResponse error =
+                ErrorResponse.builder().status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                        .error("Sunucu Hatası").message("Beklenmeyen bir hata oluştu").build();
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
