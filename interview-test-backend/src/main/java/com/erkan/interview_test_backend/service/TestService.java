@@ -2,6 +2,8 @@ package com.erkan.interview_test_backend.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
 
@@ -15,30 +17,55 @@ public class TestService {
 
     private final HuggingFaceService huggingFaceService;
     private final TestResultRepository testResultRepository;
+    private final Map<String, List<QuestionDTO>> activeTests;
 
     public TestService(HuggingFaceService huggingFaceService,
             TestResultRepository testResultRepository) {
         this.huggingFaceService = huggingFaceService;
         this.testResultRepository = testResultRepository;
+        this.activeTests = new ConcurrentHashMap<>();
     }
 
     public List<QuestionDTO> startTest(TestCategory category) {
-        return huggingFaceService.generateQuestions(category, 10);
+        List<QuestionDTO> questions = huggingFaceService.generateQuestions(category, 10);
+        String testId = generateTestId();
+        activeTests.put(testId, questions);
+        return questions;
     }
 
-    public TestResult submitTest(TestCategory category, List<String> answers,
+    public TestResult submitTest(String testId, TestCategory category, List<String> answers,
             List<String> weakTopics) {
+        List<QuestionDTO> questions = activeTests.get(testId);
+        if (questions == null) {
+            throw new IllegalStateException("Test bulunamadı veya süresi dolmuş");
+        }
+
         TestResult result = new TestResult();
         result.setCategory(category);
-        result.setScore(calculateScore(answers)); // TODO: Gerçek puanlama sistemi eklenecek
+        result.setScore(calculateScore(questions, answers));
         result.setWeakTopics(weakTopics);
         result.setTestDate(LocalDateTime.now());
 
+        activeTests.remove(testId); // Testi temizle
         return testResultRepository.save(result);
     }
 
-    private Integer calculateScore(List<String> answers) {
-        // TODO: Gerçek puanlama mantığı implement edilecek
-        return 70; // Şimdilik örnek puan
+    private Integer calculateScore(List<QuestionDTO> questions, List<String> answers) {
+        if (questions.size() != answers.size()) {
+            throw new IllegalArgumentException("Cevap sayısı soru sayısı ile eşleşmiyor");
+        }
+
+        int correctAnswers = 0;
+        for (int i = 0; i < questions.size(); i++) {
+            if (questions.get(i).getCorrectAnswer().equals(answers.get(i))) {
+                correctAnswers++;
+            }
+        }
+
+        return (correctAnswers * 100) / questions.size();
+    }
+
+    private String generateTestId() {
+        return System.currentTimeMillis() + "-" + Math.random();
     }
 }
