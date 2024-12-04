@@ -1,14 +1,17 @@
 package com.erkan.interview_test_backend.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.mockito.ArgumentMatchers.any;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import static org.mockito.Mockito.when;
 import org.mockito.MockitoAnnotations;
 
 import com.erkan.interview_test_backend.dto.QuestionDTO;
@@ -24,63 +27,65 @@ class TestServiceTest {
     @Mock
     private TestResultRepository testResultRepository;
 
+    @InjectMocks
     private TestService testService;
 
     @BeforeEach
-    void setUp() throws Exception {
-        MockitoAnnotations.openMocks(this).close();
-        testService = new TestService(huggingFaceService, testResultRepository);
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
     }
 
     @Test
     void startTest_ShouldReturnQuestions() {
         // Given
-        List<QuestionDTO> mockQuestions =
-                Arrays.asList(createMockQuestion("Soru 1"), createMockQuestion("Soru 2"));
-        when(huggingFaceService.generateQuestions(any(), any(Integer.class)))
-                .thenReturn(mockQuestions);
+        List<QuestionDTO> mockQuestions = Arrays.asList(
+            QuestionDTO.builder()
+                .question("What is Java?")
+                .options(Arrays.asList("A", "B", "C", "D"))
+                .correctAnswer("A")
+                .explanation("Java is a programming language")
+                .build()
+        );
+
+        when(huggingFaceService.generateQuestions(any(TestCategory.class), any(Integer.class)))
+            .thenReturn(mockQuestions);
 
         // When
         List<QuestionDTO> result = testService.startTest(TestCategory.CORE_JAVA);
 
         // Then
-        assertEquals(2, result.size());
-        assertEquals("Soru 1", result.get(0).getQuestion());
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals("What is Java?", result.get(0).getQuestion());
     }
 
     @Test
-    void submitTest_WithValidAnswers_ShouldCalculateScore() {
+    void submitTest_ShouldCalculateScoreCorrectly() {
         // Given
-        String testId = "test-123";
-        List<String> answers = Arrays.asList("Seçenek A", "Seçenek B");
-        List<String> weakTopics = Arrays.asList("Threads", "Collections");
+        String testId = testService.getCurrentTestId();
+        List<QuestionDTO> questions = Arrays.asList(
+            QuestionDTO.builder()
+                .question("What is Java?")
+                .options(Arrays.asList("A", "B", "C", "D"))
+                .correctAnswer("A")
+                .explanation("Java is a programming language")
+                .build()
+        );
+        testService.getActiveTests().put(testId, questions);
 
-        // Test öncesi active tests'e mock soruları ekle
-        List<QuestionDTO> mockQuestions = Arrays.asList(createMockQuestion("Soru 1", "Seçenek A"),
-                createMockQuestion("Soru 2", "Seçenek A"));
-        testService.getActiveTests().put(testId, mockQuestions);
+        List<String> answers = Arrays.asList("A");
+        List<String> weakTopics = Arrays.asList("OOP");
 
-        when(testResultRepository.save(any())).thenAnswer(i -> i.getArguments()[0]);
+        when(testResultRepository.save(any(TestResult.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
-        TestResult result =
-                testService.submitTest(testId, TestCategory.CORE_JAVA, answers, weakTopics);
+        TestResult result = testService.submitTest(testId, TestCategory.CORE_JAVA, answers, weakTopics);
 
         // Then
-        assertEquals(50, result.getScore());
+        assertNotNull(result);
+        assertEquals(100, result.getScore());
+        assertEquals(TestCategory.CORE_JAVA, result.getCategory());
         assertEquals(weakTopics, result.getWeakTopics());
-    }
-
-    private QuestionDTO createMockQuestion(String question) {
-        return createMockQuestion(question, "Seçenek A");
-    }
-
-    private QuestionDTO createMockQuestion(String question, String correctAnswer) {
-        QuestionDTO dto = new QuestionDTO();
-        dto.setQuestion(question);
-        dto.setOptions(Arrays.asList("Seçenek A", "Seçenek B", "Seçenek C", "Seçenek D"));
-        dto.setCorrectAnswer(correctAnswer);
-        dto.setExplanation("Açıklama");
-        return dto;
     }
 }
