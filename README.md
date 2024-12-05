@@ -1,5 +1,7 @@
 # Interview Test Application
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Bu proje, yazılım geliştiriciler için mülakat sorularını otomatik olarak oluşturan ve yöneten bir uygulamadır. OpenAI ve HuggingFace entegrasyonları ile farklı kategorilerde sorular üretebilir.
 
 ## Özellikler
