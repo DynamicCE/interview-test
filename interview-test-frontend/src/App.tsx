@@ -2,154 +2,132 @@ import { useState } from 'react'
 import axios from 'axios'
 import './App.css'
 
-interface QuestionDTO {
-  question: string;
-  options: string[];
-  correctAnswer: string;
-  explanation: string;
+interface Question {
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
 }
 
-interface TestResponse {
-  testId: string;
-  questions: QuestionDTO[];
+interface TestResult {
+    score: number;
+    weakTopics: string[];
+    feedback: string;
 }
-
-enum TestCategory {
-  CORE_JAVA = 'CORE_JAVA',
-  SPRING_FRAMEWORK = 'SPRING_FRAMEWORK',
-  SQL = 'SQL',
-  DESIGN_PATTERNS = 'DESIGN_PATTERNS'
-}
-
-const categoryDisplayNames = {
-  [TestCategory.CORE_JAVA]: 'Core Java',
-  [TestCategory.SPRING_FRAMEWORK]: 'Spring Framework',
-  [TestCategory.SQL]: 'SQL',
-  [TestCategory.DESIGN_PATTERNS]: 'Design Patterns'
-};
 
 function App() {
-  const [category, setCategory] = useState<TestCategory | ''>('')
-  const [questions, setQuestions] = useState<QuestionDTO[]>([])
-  const [results, setResults] = useState(null)
-  const [testId, setTestId] = useState('')
-  const [answers, setAnswers] = useState<string[]>([])
+    const [category, setCategory] = useState('')
+    const [questions, setQuestions] = useState<Question[]>([])
+    const [answers, setAnswers] = useState<{[key: number]: string}>({})
+    const [testId, setTestId] = useState<string>('')
+    const [result, setResult] = useState<TestResult | null>(null)
 
-  const categories = Object.values(TestCategory)
-
-  const startTest = async () => {
-    try {
-      const response = await axios.get<TestResponse>(`/api/test/start/${category}`, {
-        withCredentials: true
-      });
-
-      console.log('Test başlatıldı:', response.data);
-
-      if (!response.data.testId || !response.data.questions) {
-        throw new Error('Sunucudan geçersiz yanıt alındı');
-      }
-
-      setQuestions(response.data.questions);
-      setTestId(response.data.testId);
-      setAnswers(new Array(response.data.questions.length).fill(''));
-    } catch (error) {
-      console.error('Error fetching questions:', error);
-      if (axios.isAxiosError(error) && error.response) {
-        const errorMessage = error.response.data.message || 'Bilinmeyen bir hata oluştu';
-        const errorDetails = error.response.data.details || '';
-        alert(`Hata: ${errorMessage}\n${errorDetails}`);
-      } else {
-        alert('Sorular yüklenirken bir hata oluştu');
-      }
-    }
-  };
-
-  const submitResults = async () => {
-    if (!testId || !answers || answers.length === 0) {
-      alert('Lütfen tüm soruları cevaplayın');
-      return;
+    const handleStartTest = async () => {
+        try {
+            const response = await axios.get(`/api/test/start/${category}`)
+            setQuestions(response.data.questions)
+            setTestId(response.data.testId)
+            setAnswers({})
+            setResult(null)
+        } catch (error) {
+            console.error('Error fetching questions:', error)
+            alert('Bir hata oluştu, lütfen tekrar deneyin.')
+        }
     }
 
-    console.log('Gönderilen veriler:', {
-      testId: testId,
-      category: category,
-      answers: answers,
-      weakTopics: []
-    });
-
-    try {
-      const response = await axios.post('/api/test/submit', {
-        testId: testId,
-        category: category,
-        answers: answers,
-        weakTopics: []
-      }, {
-        withCredentials: true
-      });
-      
-      console.log('Backend yanıtı:', response.data);
-      setResults(response.data);
-    } catch (error) {
-      console.error('Submit hatası:', error);
-      if (axios.isAxiosError(error) && error.response) {
-        const errorMessage = error.response.data.message || 'Bilinmeyen bir hata oluştu';
-        const errorDetails = error.response.data.details || '';
-        alert(`Hata: ${errorMessage}\n${errorDetails}`);
-      } else {
-        alert('Sonuçlar gönderilirken bir hata oluştu');
-      }
+    const handleAnswerSelect = (questionIndex: number, optionIndex: string) => {
+        setAnswers(prev => ({
+            ...prev,
+            [questionIndex]: optionIndex
+        }))
     }
-  };
 
-  return (
-    <div className="App">
-      <h1>Java Interview Practice Platform</h1>
-      <div>
-        <label>Select Category:</label>
-        <select value={category} onChange={(e) => setCategory(e.target.value as TestCategory)}>
-          <option value="">--Select--</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>
-              {categoryDisplayNames[cat]}
-            </option>
-          ))}
-        </select>
-        <button onClick={startTest} disabled={!category}>
-          Start Test
-        </button>
-      </div>
-      <div>
-        {questions.length > 0 && (
-          <div>
-            <ul>
-              {questions.map((question, index) => (
-                <li key={index}>
-                  <p>{question.question}</p>
-                  <select 
-                    value={answers[index]} 
-                    onChange={(e) => {
-                      const newAnswers = [...answers]
-                      newAnswers[index] = e.target.value
-                      setAnswers(newAnswers)
-                    }}
-                  >
-                    <option value="">--Seçiniz--</option>
-                    {question.options.map((option, optIndex) => (
-                      <option key={optIndex} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </li>
-              ))}
-            </ul>
-            <button onClick={submitResults}>Submit Results</button>
-          </div>
-        )}
-        {results && <div>Test Results: {JSON.stringify(results)}</div>}
-      </div>
-    </div>
-  )
+    const handleSubmit = async () => {
+        if (Object.keys(answers).length !== questions.length) {
+            alert('Lütfen tüm soruları cevaplayın!')
+            return
+        }
+
+        try {
+            const response = await axios.post('/api/test/submit', {
+                testId: testId,
+                category: category,
+                answers: Object.values(answers),
+                weakTopics: []
+            })
+            setResult(response.data)
+        } catch (error) {
+            console.error('Error submitting test:', error)
+            alert('Testi gönderirken bir hata oluştu, lütfen tekrar deneyin.')
+        }
+    }
+
+    return (
+        <div className="App">
+            <h1>Test Başlat</h1>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="">Kategori Seç</option>
+                <option value="CORE_JAVA">Core Java</option>
+                <option value="SPRING_FRAMEWORK">Spring Framework</option>
+                <option value="SQL">SQL</option>
+                <option value="DESIGN_PATTERNS">Design Patterns</option>
+            </select>
+            <button onClick={handleStartTest}>Başlat</button>
+            
+            {questions.length > 0 && (
+                <>
+                    <div className="questions">
+                        {questions.map((q, qIndex) => (
+                            <div key={qIndex} className="question">
+                                <h3>{q.question}</h3>
+                                <ul>
+                                    {q.options.map((option, optIndex) => (
+                                        <li 
+                                            key={optIndex} 
+                                            className={`
+                                                ${answers[qIndex] === String.fromCharCode(65 + optIndex) ? 'selected' : ''}
+                                                ${result ? 
+                                                    (String.fromCharCode(65 + optIndex) === q.correctAnswer ? 'correct' : 
+                                                    answers[qIndex] === String.fromCharCode(65 + optIndex) ? 'wrong' : '') 
+                                                    : ''
+                                                }
+                                            `}
+                                            onClick={() => !result && handleAnswerSelect(qIndex, String.fromCharCode(65 + optIndex))}
+                                        >
+                                            {String.fromCharCode(65 + optIndex)}. {option}
+                                        </li>
+                                    ))}
+                                </ul>
+                                {result && (
+                                    <div className="explanation">
+                                        <p>{q.explanation}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    {!result && <button onClick={handleSubmit} className="submit-btn">Testi Bitir</button>}
+                    {result && (
+                        <div className="result">
+                            <h2>Test Sonucu</h2>
+                            <p>Puan: {result.score}</p>
+                            <p>{result.feedback}</p>
+                            {result.weakTopics.length > 0 && (
+                                <div className="weak-topics">
+                                    <h3>Çalışmanız Gereken Konular:</h3>
+                                    <ul>
+                                        {result.weakTopics.map((topic, index) => (
+                                            <li key={index}>{topic}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    )
 }
 
 export default App
